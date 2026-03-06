@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 const axios = require("axios");
 const OpenAI = require("openai");
 
@@ -63,6 +63,18 @@ function run(cmd) {
   }
 }
 
+/**
+ * Run git with an array of arguments (avoids shell interpretation issues).
+ * Returns null when the command fails.
+ */
+function git(...args) {
+  try {
+    return execFileSync("git", args, { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }).trim();
+  } catch {
+    return null;
+  }
+}
+
 // ── Core Logic ───────────────────────────────────────────────────────────────
 
 /**
@@ -101,9 +113,8 @@ function isInitialPush(beforeSha) {
 function getDiffRange(beforeSha, afterSha) {
   if (isInitialPush(beforeSha)) {
     // First push — diff the entire tree introduced by afterSha
-    const firstCommit = run(`git rev-list --max-parents=0 ${afterSha}`);
+    const firstCommit = git("rev-list", "--max-parents=0", afterSha);
     if (!firstCommit) return null;
-    // Use diff-tree for the root commit so there is always something to compare
     return { from: `${firstCommit}^`, to: afterSha, useEmpty: true };
   }
   return { from: beforeSha, to: afterSha, useEmpty: false };
@@ -116,11 +127,11 @@ function getChangedFiles(beforeSha, afterSha) {
   const range = getDiffRange(beforeSha, afterSha);
   if (!range) return [];
 
-  const cmd = range.useEmpty
-    ? `git diff --name-status 4b825dc642cb6eb9a060e54bf899d69f82cf7006 ${range.to}`
-    : `git diff --name-status ${range.from} ${range.to}`;
+  const from = range.useEmpty
+    ? "4b825dc642cb6eb9a060e54bf899d69f82cf7006"
+    : range.from;
 
-  const output = run(cmd);
+  const output = git("diff", "--name-status", from, range.to);
   if (!output) return [];
 
   return output
@@ -139,14 +150,17 @@ function getCodeDiff(beforeSha, afterSha) {
   const range = getDiffRange(beforeSha, afterSha);
   if (!range) return "";
 
-  // Build exclusion pathspec arguments
-  const excludeArgs = IGNORED_PATTERNS.map((p) => `:(exclude)${p}`).join(" ");
+  const from = range.useEmpty
+    ? "4b825dc642cb6eb9a060e54bf899d69f82cf7006"
+    : range.from;
 
-  const cmd = range.useEmpty
-    ? `git diff 4b825dc642cb6eb9a060e54bf899d69f82cf7006 ${range.to} -- . ${excludeArgs}`
-    : `git diff ${range.from} ${range.to} -- . ${excludeArgs}`;
+  // Build args array — using execFileSync avoids shell interpretation of :(exclude)
+  const args = ["diff", from, range.to, "--", "."];
+  for (const p of IGNORED_PATTERNS) {
+    args.push(`:(exclude)${p}`);
+  }
 
-  const diff = run(cmd);
+  const diff = git(...args);
   if (!diff) return "";
 
   // Truncate to stay within LLM context limits
@@ -217,6 +231,9 @@ async function postToSlack(webhookUrl, changelog) {
 
 async function main() {
   console.log("🚀 Pushlog — starting");
+
+  // Mark /github/workspace as safe so git works inside the Docker container
+  run("git config --global --add safe.directory /github/workspace");
 
   // 1. Read inputs
   const { slackWebhook, openaiApiKey, branch } = getInputs();
