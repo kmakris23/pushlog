@@ -1,0 +1,96 @@
+# Pushlog
+
+A Docker-based GitHub Action that generates AI-powered changelogs from commits and code changes and posts them to Slack.
+
+When a push occurs on a configured branch, the action:
+
+1. Collects commit messages and metadata from the push event.
+2. Extracts the code diff between the before/after commits.
+3. Sends the data to the OpenAI API to generate a human-friendly changelog.
+4. Posts the changelog to a Slack channel via webhook.
+
+The changelog is written in plain language, understandable by both developers and non-technical stakeholders.
+
+---
+
+## Required Secrets
+
+| Secret            | Description                              |
+| ----------------- | ---------------------------------------- |
+| `SLACK_WEBHOOK`   | Slack incoming webhook URL               |
+| `OPENAI_API_KEY`  | OpenAI API key with access to GPT models |
+
+---
+
+## Inputs
+
+| Input            | Required | Default | Description          |
+| ---------------- | -------- | ------- | -------------------- |
+| `slack_webhook`  | Yes      | —       | Slack webhook URL    |
+| `openai_api_key` | Yes      | —       | OpenAI API key       |
+| `branch`         | Yes      | —       | Branch to monitor    |
+
+---
+
+## Example Workflow
+
+```yaml
+name: Pushlog
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: kmakris23/pushlog@v1
+        with:
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          branch: main
+```
+
+> **Important:** `fetch-depth: 0` is required so the action can compute diffs across the full commit history.
+
+---
+
+## Example Slack Output
+
+```
+Repository Update
+
+New Features
+• Added login API with JWT authentication
+
+Bug Fixes
+• Fixed issue where duplicate orders could be created
+
+Improvements
+• Refactored invoice service for better maintainability
+```
+
+---
+
+## How It Works
+
+1. Reads the GitHub push event payload from `GITHUB_EVENT_PATH`.
+2. Extracts commit messages, authors, and file change metadata.
+3. Runs `git diff` between the before and after SHAs.
+4. Filters out noisy paths (`node_modules`, `dist`, `build`, lock files).
+5. Truncates the diff to 15 000 characters to fit LLM context limits.
+6. Sends the commit list and diff to OpenAI (`gpt-4.1-mini`, temperature 0.2).
+7. Posts the generated changelog to Slack.
+
+---
+
+## License
+
+MIT

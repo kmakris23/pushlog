@@ -1,0 +1,20 @@
+name: Pushlog
+description: Generates an AI-powered changelog from commits and code changes and posts it to Slack
+author: kmakris23
+
+inputs:
+  slack_webhook:
+    description: Slack webhook URL
+    required: true
+
+  openai_api_key:
+    description: OpenAI API key
+    required: true
+
+  branch:
+    description: Branch to monitor
+    required: true
+
+runs:
+  using: docker
+  image: Dockerfile
