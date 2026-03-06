@@ -19,3 +19,4 @@ jobs:
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           branch: main
+          language: el

@@ -24,6 +24,7 @@ function getInputs() {
   const slackWebhook = process.env.INPUT_SLACK_WEBHOOK;
   const openaiApiKey = process.env.INPUT_OPENAI_API_KEY;
   const branch = process.env.INPUT_BRANCH;
+  const language = process.env.INPUT_LANGUAGE || "en";
 
   if (!slackWebhook) {
     throw new Error("Missing required input: slack_webhook");
@@ -35,7 +36,7 @@ function getInputs() {
     throw new Error("Missing required input: branch");
   }
 
-  return { slackWebhook, openaiApiKey, branch };
+  return { slackWebhook, openaiApiKey, branch, language };
 }
 
 /**
@@ -174,7 +175,7 @@ function getCodeDiff(beforeSha, afterSha) {
 /**
  * Send commit and diff data to OpenAI and return a generated changelog.
  */
-async function generateChangelog(apiKey, commits, diff) {
+async function generateChangelog(apiKey, commits, diff, language) {
   const client = new OpenAI({ apiKey });
 
   const commitSummary = commits
@@ -182,6 +183,7 @@ async function generateChangelog(apiKey, commits, diff) {
     .join("\n");
 
   const userMessage = `Generate a clear and concise changelog for the following code changes.
+Write the changelog in language code: ${language}.
 
 Guidelines:
 * Use simple language
@@ -236,7 +238,7 @@ async function main() {
   run("git config --global --add safe.directory /github/workspace");
 
   // 1. Read inputs
-  const { slackWebhook, openaiApiKey, branch } = getInputs();
+  const { slackWebhook, openaiApiKey, branch, language } = getInputs();
 
   // 2. Load push event payload
   const event = loadEvent();
@@ -279,7 +281,7 @@ async function main() {
 
   // 6. Generate changelog with OpenAI
   console.log("🤖 Generating changelog via OpenAI…");
-  const changelog = await generateChangelog(openaiApiKey, commits, diff);
+  const changelog = await generateChangelog(openaiApiKey, commits, diff, language);
 
   console.log("─── Generated Changelog ───");
   console.log(changelog);

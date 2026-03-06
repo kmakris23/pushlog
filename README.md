@@ -29,6 +29,7 @@ The changelog is written in plain language, understandable by both developers an
 | `slack_webhook`  | Yes      | —       | Slack webhook URL    |
 | `openai_api_key` | Yes      | —       | OpenAI API key       |
 | `branch`         | Yes      | —       | Branch to monitor    |
+| `language`       | No       | `en`    | Changelog language code (e.g. en, el, fr, de) |
 
 ---
 
@@ -56,6 +57,7 @@ jobs:
           slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           branch: main
+          language: en
 ```
 
 > **Important:** `fetch-depth: 0` is required so the action can compute diffs across the full commit history.
