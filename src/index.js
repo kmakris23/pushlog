@@ -25,6 +25,8 @@ function getInputs() {
   const openaiApiKey = process.env.INPUT_OPENAI_API_KEY;
   const branch = process.env.INPUT_BRANCH;
   const language = process.env.INPUT_LANGUAGE || "en";
+  const slackTitle = process.env.INPUT_SLACK_TITLE || "Repository Update";
+  const slackMentions = process.env.INPUT_SLACK_MENTIONS || "";
 
   if (!slackWebhook) {
     throw new Error("Missing required input: slack_webhook");
@@ -36,7 +38,7 @@ function getInputs() {
     throw new Error("Missing required input: branch");
   }
 
-  return { slackWebhook, openaiApiKey, branch, language };
+  return { slackWebhook, openaiApiKey, branch, language, slackTitle, slackMentions };
 }
 
 /**
@@ -219,9 +221,10 @@ ${diff}`;
 /**
  * Post the changelog to Slack via an incoming webhook.
  */
-async function postToSlack(webhookUrl, changelog) {
+async function postToSlack(webhookUrl, changelog, title, mentions) {
+  const mentionLine = mentions ? `${mentions}\n\n` : "";
   const payload = {
-    text: `*Repository Update*\n\n${changelog}`,
+    text: `${mentionLine}*${title}*\n\n${changelog}`,
   };
 
   await axios.post(webhookUrl, payload, {
@@ -238,7 +241,7 @@ async function main() {
   run("git config --global --add safe.directory /github/workspace");
 
   // 1. Read inputs
-  const { slackWebhook, openaiApiKey, branch, language } = getInputs();
+  const { slackWebhook, openaiApiKey, branch, language, slackTitle, slackMentions } = getInputs();
 
   // 2. Load push event payload
   const event = loadEvent();
@@ -289,7 +292,7 @@ async function main() {
 
   // 7. Post to Slack
   console.log("📨 Posting changelog to Slack…");
-  await postToSlack(slackWebhook, changelog);
+  await postToSlack(slackWebhook, changelog, slackTitle, slackMentions);
 
   console.log("✅ Changelog posted to Slack successfully.");
 }

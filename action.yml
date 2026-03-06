@@ -20,6 +20,16 @@ inputs:
     required: false
     default: en
 
+  slack_title:
+    description: Title for the Slack message
+    required: false
+    default: Repository Update
+
+  slack_mentions:
+    description: Slack mentions to include (e.g. <!channel>, <!here>, <@U012345>)
+    required: false
+    default: ''
+
 runs:
   using: docker
   image: Dockerfile

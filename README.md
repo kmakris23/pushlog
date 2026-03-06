@@ -30,6 +30,8 @@ The changelog is written in plain language, understandable by both developers an
 | `openai_api_key` | Yes      | —       | OpenAI API key       |
 | `branch`         | Yes      | —       | Branch to monitor    |
 | `language`       | No       | `en`    | Changelog language code (e.g. en, el, fr, de) |
+| `slack_title`    | No       | `Repository Update` | Title for the Slack message |
+| `slack_mentions` | No       | —       | Slack mentions (e.g. `<!channel>`, `<!here>`, `<@U012345>`) |
 
 ---
 
@@ -58,6 +60,8 @@ jobs:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           branch: main
           language: en
+          slack_title: Repository Update
+          slack_mentions: '<!channel>'
 ```
 
 > **Important:** `fetch-depth: 0` is required so the action can compute diffs across the full commit history.

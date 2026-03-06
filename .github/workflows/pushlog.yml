@@ -20,3 +20,5 @@ jobs:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           branch: main
           language: el
+          slack_title: "Pushlog Update 📦"
+          slack_mentions: '<!channel>'
