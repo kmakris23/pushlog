@@ -1,0 +1,21 @@
+name: Pushlog
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./
+        with:
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          branch: main
