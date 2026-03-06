@@ -88,10 +88,39 @@ function getBranchFromRef(ref) {
 }
 
 /**
+ * Check if the before SHA is valid (not all zeros, which indicates the first push).
+ */
+function isInitialPush(beforeSha) {
+  return !beforeSha || /^0+$/.test(beforeSha);
+}
+
+/**
+ * Build the diff range. On the first push the "before" SHA is all zeros,
+ * so we fall back to diffing against the parent of the earliest commit.
+ */
+function getDiffRange(beforeSha, afterSha) {
+  if (isInitialPush(beforeSha)) {
+    // First push — diff the entire tree introduced by afterSha
+    const firstCommit = run(`git rev-list --max-parents=0 ${afterSha}`);
+    if (!firstCommit) return null;
+    // Use diff-tree for the root commit so there is always something to compare
+    return { from: `${firstCommit}^`, to: afterSha, useEmpty: true };
+  }
+  return { from: beforeSha, to: afterSha, useEmpty: false };
+}
+
+/**
  * Get the list of changed files between two commits, ignoring noisy paths.
  */
 function getChangedFiles(beforeSha, afterSha) {
-  const output = run(`git diff --name-status ${beforeSha} ${afterSha}`);
+  const range = getDiffRange(beforeSha, afterSha);
+  if (!range) return [];
+
+  const cmd = range.useEmpty
+    ? `git diff --name-status 4b825dc642cb6eb9a060e54bf899d69f82cf7006 ${range.to}`
+    : `git diff --name-status ${range.from} ${range.to}`;
+
+  const output = run(cmd);
   if (!output) return [];
 
   return output
@@ -107,15 +136,17 @@ function getChangedFiles(beforeSha, afterSha) {
  * Get the code diff between two commits, filtered and truncated.
  */
 function getCodeDiff(beforeSha, afterSha) {
+  const range = getDiffRange(beforeSha, afterSha);
+  if (!range) return "";
+
   // Build exclusion pathspec arguments
-  const excludeArgs = IGNORED_PATTERNS.map(
-    (p) => `":(exclude)${p}"`
-  ).join(" ");
+  const excludeArgs = IGNORED_PATTERNS.map((p) => `:(exclude)${p}`).join(" ");
 
-  const diff = run(
-    `git diff ${beforeSha} ${afterSha} -- . ${excludeArgs}`
-  );
+  const cmd = range.useEmpty
+    ? `git diff 4b825dc642cb6eb9a060e54bf899d69f82cf7006 ${range.to} -- . ${excludeArgs}`
+    : `git diff ${range.from} ${range.to} -- . ${excludeArgs}`;
 
+  const diff = run(cmd);
   if (!diff) return "";
 
   // Truncate to stay within LLM context limits
