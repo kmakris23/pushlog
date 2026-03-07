@@ -7,6 +7,21 @@ const OpenAI = require("openai");
 
 const DIFF_CHAR_LIMIT = 15000;
 
+const DEFAULT_SYSTEM_PROMPT = `You are Pushlog, an AI assistant that writes changelogs for GitHub repository pushes.
+Your task is to turn commit metadata and code diffs into a concise, channel-agnostic changelog.
+
+Requirements:
+- Use simple language
+- Group related changes
+- Highlight new features
+- Highlight bug fixes
+- Mention improvements
+- Avoid referencing internal file paths unless necessary
+- Format the result as a clean bullet list
+- Follow any additional user instructions unless they conflict with these requirements or the provided repository context`;
+
+const DEFAULT_USER_PROMPT = "Generate a clear and concise changelog for these changes.";
+
 const IGNORED_PATTERNS = [
   "node_modules",
   "dist",
@@ -27,6 +42,8 @@ function getInputs() {
   const language = process.env.INPUT_LANGUAGE || "en";
   const slackTitle = process.env.INPUT_SLACK_TITLE || "Repository Update";
   const slackMentions = process.env.INPUT_SLACK_MENTIONS || "";
+  const userPrompt = (process.env.INPUT_USER_PROMPT || process.env.INPUT_CUSTOM_PROMPT || "").trim();
+  const systemPrompt = (process.env.INPUT_SYSTEM_PROMPT || "").trim();
 
   if (!slackWebhook) {
     throw new Error("Missing required input: slack_webhook");
@@ -38,7 +55,16 @@ function getInputs() {
     throw new Error("Missing required input: branch");
   }
 
-  return { slackWebhook, openaiApiKey, branch, language, slackTitle, slackMentions };
+  return {
+    slackWebhook,
+    openaiApiKey,
+    branch,
+    language,
+    slackTitle,
+    slackMentions,
+    userPrompt,
+    systemPrompt,
+  };
 }
 
 /**
@@ -175,32 +201,34 @@ function getCodeDiff(beforeSha, afterSha) {
 }
 
 /**
+ * Build the system prompt that defines the changelog behavior.
+ */
+function buildSystemPrompt(language, systemPrompt) {
+  const prompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  return `${prompt}\n\nWrite the final output in language code: ${language}.`;
+}
+
+/**
+ * Build the user prompt by combining optional user instructions with commit and diff context.
+ */
+function buildUserPrompt(userPrompt, commitSummary, diff) {
+  const userInstructions = userPrompt || DEFAULT_USER_PROMPT;
+
+  return `${userInstructions}\n\nCommits:\n${commitSummary}\n\nCode changes:\n${diff}`;
+}
+
+/**
  * Send commit and diff data to OpenAI and return a generated changelog.
  */
-async function generateChangelog(apiKey, commits, diff, language) {
+async function generateChangelog(apiKey, commits, diff, language, userPrompt, systemPrompt) {
   const client = new OpenAI({ apiKey });
 
   const commitSummary = commits
     .map((c) => `- ${c.message} (by ${c.author})`)
     .join("\n");
 
-  const userMessage = `Generate a clear and concise changelog for the following code changes.
-Write the changelog in language code: ${language}.
-
-Guidelines:
-* Use simple language
-* Group related changes
-* Highlight new features
-* Highlight bug fixes
-* Mention improvements
-* Avoid referencing internal file paths unless necessary
-* Format as a clean bullet list
-
-Commits:
-${commitSummary}
-
-Code changes:
-${diff}`;
+  const systemMessage = buildSystemPrompt(language, systemPrompt);
+  const userMessage = buildUserPrompt(userPrompt, commitSummary, diff);
 
   const response = await client.chat.completions.create({
     model: "gpt-4.1-mini",
@@ -208,8 +236,7 @@ ${diff}`;
     messages: [
       {
         role: "system",
-        content:
-          "You are a senior software engineer writing changelogs for development teams.",
+        content: systemMessage,
       },
       { role: "user", content: userMessage },
     ],
@@ -241,7 +268,16 @@ async function main() {
   run("git config --global --add safe.directory /github/workspace");
 
   // 1. Read inputs
-  const { slackWebhook, openaiApiKey, branch, language, slackTitle, slackMentions } = getInputs();
+  const {
+    slackWebhook,
+    openaiApiKey,
+    branch,
+    language,
+    slackTitle,
+    slackMentions,
+    userPrompt,
+    systemPrompt,
+  } = getInputs();
 
   // 2. Load push event payload
   const event = loadEvent();
@@ -284,7 +320,14 @@ async function main() {
 
   // 6. Generate changelog with OpenAI
   console.log("🤖 Generating changelog via OpenAI…");
-  const changelog = await generateChangelog(openaiApiKey, commits, diff, language);
+  const changelog = await generateChangelog(
+    openaiApiKey,
+    commits,
+    diff,
+    language,
+    userPrompt,
+    systemPrompt
+  );
 
   console.log("─── Generated Changelog ───");
   console.log(changelog);

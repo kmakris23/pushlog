@@ -30,6 +30,16 @@ inputs:
     required: false
     default: ''
 
+  user_prompt:
+    description: Optional freeform user instructions for changelog generation. Commit and diff context are always included automatically
+    required: false
+    default: ''
+
+  system_prompt:
+    description: Optional system prompt override for changelog generation. Language is still injected automatically
+    required: false
+    default: ''
+
 branding:
   icon: arrow-up-circle
   color: red

@@ -32,6 +32,23 @@ The changelog is written in plain language, understandable by both developers an
 | `language`       | No       | `en`    | Changelog language code (e.g. en, el, fr, de) |
 | `slack_title`    | No       | `Repository Update` | Title for the Slack message |
 | `slack_mentions` | No       | —       | Slack mentions (e.g. `<!channel>`, `<!here>`, `<@U012345>`) |
+| `user_prompt`    | No       | —       | Freeform extra instructions for changelog generation |
+| `system_prompt`  | No       | —       | Optional system prompt override for the model behavior |
+
+### Prompt Inputs
+
+You can provide `user_prompt` as plain instructions.
+
+Pushlog always sends the required context on its own:
+
+- What the tool is doing
+- Which language to use
+- The commit summary
+- The filtered code diff
+
+That means users do not need placeholders or prompt templates. Whatever you put in `user_prompt` is treated as additional guidance layered on top of the default behavior.
+
+You can also override `system_prompt` if you want to change the base model behavior. Pushlog still injects the selected language automatically.
 
 ---
 
@@ -62,6 +79,68 @@ jobs:
           language: en
           slack_title: Repository Update
           slack_mentions: '<!channel>'
+```
+
+### Example With User Prompt
+
+```yaml
+name: Pushlog
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: kmakris23/pushlog@v1
+        with:
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          branch: main
+          user_prompt: |
+            Focus on user-facing impact first.
+            Group the result into New Features, Fixes, and Maintenance.
+            Keep each bullet short.
+```
+
+### Example With System Prompt Override
+
+```yaml
+name: Pushlog
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: kmakris23/pushlog@v1
+        with:
+          slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          branch: main
+          system_prompt: |
+            You write release notes for engineering teams.
+            Prefer crisp bullets and group related changes by theme.
+            Focus on observable impact and skip low-value implementation details.
+          user_prompt: |
+            Keep the output compact.
 ```
 
 > **Important:** `fetch-depth: 0` is required so the action can compute diffs across the full commit history.
