@@ -221,10 +221,10 @@ ${diff}`;
 /**
  * Post the changelog to Slack via an incoming webhook.
  */
-async function postToSlack(webhookUrl, changelog, title, mentions) {
+async function postToSlack(webhookUrl, changelog, title, mentions, branch) {
   const mentionLine = mentions ? `${mentions}\n\n` : "";
   const payload = {
-    text: `${mentionLine}*${title}*\n\n${changelog}`,
+    text: `${mentionLine}*${title}* (\`${branch}\`)\n\n${changelog}`,
   };
 
   await axios.post(webhookUrl, payload, {
@@ -292,7 +292,7 @@ async function main() {
 
   // 7. Post to Slack
   console.log("📨 Posting changelog to Slack…");
-  await postToSlack(slackWebhook, changelog, slackTitle, slackMentions);
+  await postToSlack(slackWebhook, changelog, slackTitle, slackMentions, pushBranch);
 
   console.log("✅ Changelog posted to Slack successfully.");
 }
