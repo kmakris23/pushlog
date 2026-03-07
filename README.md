@@ -71,7 +71,9 @@ jobs:
 ## Example Slack Output
 
 ```
-Repository Update
+@channel
+
+Repository Update (main)
 
 New Features
 • Added login API with JWT authentication
