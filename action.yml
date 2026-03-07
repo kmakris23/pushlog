@@ -1,4 +1,4 @@
-name: Pushlog AI
+name: Pushlog AI Generator
 description: Generates an AI-powered changelog from commits and code changes and posts it to Slack
 author: kmakris23
 
