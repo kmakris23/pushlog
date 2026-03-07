@@ -8,10 +8,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# GitHub Actions mounts the repo at /github/workspace and runs from there,
-# so Node.js won't find modules installed in /app. Set NODE_PATH so it can.
+# GitHub Actions overrides the container working directory to /github/workspace,
+# so use absolute paths for the action code and expose dependencies via NODE_PATH.
 ENV NODE_PATH=/app/node_modules
 
 COPY . .
 
-ENTRYPOINT ["node", "src/index.js"]
+ENTRYPOINT ["node", "/app/src/index.js"]
