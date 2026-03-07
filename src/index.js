@@ -7,6 +7,35 @@ const OpenAI = require("openai");
 
 const DIFF_CHAR_LIMIT = 15000;
 
+const LANGUAGE_NAMES = {
+  en: "English",
+  el: "Greek",
+  fr: "French",
+  de: "German",
+  es: "Spanish",
+  it: "Italian",
+  pt: "Portuguese",
+  "pt-br": "Brazilian Portuguese",
+  nl: "Dutch",
+  pl: "Polish",
+  tr: "Turkish",
+  ru: "Russian",
+  uk: "Ukrainian",
+  cs: "Czech",
+  ro: "Romanian",
+  hu: "Hungarian",
+  bg: "Bulgarian",
+  sv: "Swedish",
+  da: "Danish",
+  fi: "Finnish",
+  no: "Norwegian",
+  ja: "Japanese",
+  ko: "Korean",
+  zh: "Chinese",
+  "zh-cn": "Simplified Chinese",
+  "zh-tw": "Traditional Chinese",
+};
+
 const DEFAULT_SYSTEM_PROMPT = `You are Pushlog, an AI assistant that writes changelogs for GitHub repository pushes.
 Your task is to turn commit metadata and code diffs into a concise, channel-agnostic changelog.
 
@@ -201,20 +230,34 @@ function getCodeDiff(beforeSha, afterSha) {
 }
 
 /**
+ * Resolve a language code to a human-readable instruction for the model.
+ */
+function getLanguageInstruction(language) {
+  const normalizedLanguage = (language || "en").trim().toLowerCase();
+  const languageName = LANGUAGE_NAMES[normalizedLanguage];
+
+  if (languageName) {
+    return `Write the final output entirely in ${languageName} (language code: ${normalizedLanguage}). Do not default to English.`;
+  }
+
+  return `Write the final output entirely in the requested language (language code: ${normalizedLanguage}). Do not default to English.`;
+}
+
+/**
  * Build the system prompt that defines the changelog behavior.
  */
 function buildSystemPrompt(language, systemPrompt) {
   const prompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
-  return `${prompt}\n\nWrite the final output in language code: ${language}.`;
+  return `${prompt}\n\n${getLanguageInstruction(language)}`;
 }
 
 /**
  * Build the user prompt by combining optional user instructions with commit and diff context.
  */
-function buildUserPrompt(userPrompt, commitSummary, diff) {
+function buildUserPrompt(userPrompt, language, commitSummary, diff) {
   const userInstructions = userPrompt || DEFAULT_USER_PROMPT;
 
-  return `${userInstructions}\n\nCommits:\n${commitSummary}\n\nCode changes:\n${diff}`;
+  return `${userInstructions}\n\nRequested output language:\n${getLanguageInstruction(language)}\n\nCommits:\n${commitSummary}\n\nCode changes:\n${diff}`;
 }
 
 /**
@@ -228,7 +271,7 @@ async function generateChangelog(apiKey, commits, diff, language, userPrompt, sy
     .join("\n");
 
   const systemMessage = buildSystemPrompt(language, systemPrompt);
-  const userMessage = buildUserPrompt(userPrompt, commitSummary, diff);
+  const userMessage = buildUserPrompt(userPrompt, language, commitSummary, diff);
 
   const response = await client.chat.completions.create({
     model: "gpt-4.1-mini",
