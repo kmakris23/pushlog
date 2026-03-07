@@ -30,6 +30,9 @@ The changelog is written in plain language, understandable by both developers an
 | `openai_api_key` | Yes      | —       | OpenAI API key       |
 | `branch`         | Yes      | —       | Branch to monitor    |
 | `language`       | No       | `en`    | Changelog language code (e.g. en, el, fr, de) |
+| `openai_model`   | No       | `gpt-4.1` | OpenAI model to use for changelog generation |
+| `openai_temperature` | No   | `0.1`   | Sampling temperature for changelog generation |
+| `openai_max_output_tokens` | No | `800` | Maximum number of output tokens |
 | `slack_title`    | No       | `Repository Update` | Title for the Slack message |
 | `slack_mentions` | No       | —       | Slack mentions (e.g. `<!channel>`, `<!here>`, `<@U012345>`) |
 | `user_prompt`    | No       | —       | Freeform extra instructions for changelog generation |
@@ -49,6 +52,14 @@ Pushlog always sends the required context on its own:
 That means users do not need placeholders or prompt templates. Whatever you put in `user_prompt` is treated as additional guidance layered on top of the default behavior.
 
 You can also override `system_prompt` if you want to change the base model behavior. Pushlog still injects the selected language automatically.
+
+### OpenAI Settings
+
+Pushlog now uses the OpenAI Responses API first and falls back to Chat Completions if needed.
+
+- `openai_model`: controls quality, speed, and cost. The default is `gpt-4.1` for stronger output quality.
+- `openai_temperature`: lower values make the result more consistent. The default is `0.1`.
+- `openai_max_output_tokens`: caps the response size. The default is `800`.
 
 ---
 
@@ -77,6 +88,7 @@ jobs:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           branch: main
           language: en
+          openai_model: gpt-4.1
           slack_title: Repository Update
           slack_mentions: '<!channel>'
 ```
@@ -173,7 +185,7 @@ Improvements
 3. Runs `git diff` between the before and after SHAs.
 4. Filters out noisy paths (`node_modules`, `dist`, `build`, lock files).
 5. Truncates the diff to 15 000 characters to fit LLM context limits.
-6. Sends the commit list and diff to OpenAI (`gpt-4.1-mini`, temperature 0.2).
+6. Sends the commit list and diff to OpenAI using the Responses API first, with a fallback to Chat Completions.
 7. Posts the generated changelog to Slack.
 
 ---

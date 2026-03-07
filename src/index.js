@@ -6,6 +6,9 @@ const OpenAI = require("openai");
 // ── Configuration ────────────────────────────────────────────────────────────
 
 const DIFF_CHAR_LIMIT = 15000;
+const DEFAULT_OPENAI_MODEL = "gpt-4.1";
+const DEFAULT_OPENAI_TEMPERATURE = 0.1;
+const DEFAULT_OPENAI_MAX_OUTPUT_TOKENS = 800;
 
 const LANGUAGE_NAMES = {
   en: "English",
@@ -71,6 +74,19 @@ function getInputs() {
   const language = process.env.INPUT_LANGUAGE || "en";
   const slackTitle = process.env.INPUT_SLACK_TITLE || "Repository Update";
   const slackMentions = process.env.INPUT_SLACK_MENTIONS || "";
+  const openaiModel = (process.env.INPUT_OPENAI_MODEL || DEFAULT_OPENAI_MODEL).trim();
+  const openaiTemperature = parseNumberInput(
+    process.env.INPUT_OPENAI_TEMPERATURE,
+    DEFAULT_OPENAI_TEMPERATURE,
+    "openai_temperature",
+    { min: 0, max: 2 }
+  );
+  const openaiMaxOutputTokens = parseNumberInput(
+    process.env.INPUT_OPENAI_MAX_OUTPUT_TOKENS,
+    DEFAULT_OPENAI_MAX_OUTPUT_TOKENS,
+    "openai_max_output_tokens",
+    { integer: true, min: 1 }
+  );
   const userPrompt = (process.env.INPUT_USER_PROMPT || process.env.INPUT_CUSTOM_PROMPT || "").trim();
   const systemPrompt = (process.env.INPUT_SYSTEM_PROMPT || "").trim();
 
@@ -83,6 +99,9 @@ function getInputs() {
   if (!branch) {
     throw new Error("Missing required input: branch");
   }
+  if (!openaiModel) {
+    throw new Error("Missing required input: openai_model");
+  }
 
   return {
     slackWebhook,
@@ -91,9 +110,37 @@ function getInputs() {
     language,
     slackTitle,
     slackMentions,
+    openaiModel,
+    openaiTemperature,
+    openaiMaxOutputTokens,
     userPrompt,
     systemPrompt,
   };
+}
+
+/**
+ * Parse a numeric action input with validation.
+ */
+function parseNumberInput(rawValue, fallback, inputName, options = {}) {
+  if (rawValue === undefined || rawValue === null || String(rawValue).trim() === "") {
+    return fallback;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid input: ${inputName} must be a number`);
+  }
+  if (options.integer && !Number.isInteger(parsed)) {
+    throw new Error(`Invalid input: ${inputName} must be an integer`);
+  }
+  if (options.min !== undefined && parsed < options.min) {
+    throw new Error(`Invalid input: ${inputName} must be >= ${options.min}`);
+  }
+  if (options.max !== undefined && parsed > options.max) {
+    throw new Error(`Invalid input: ${inputName} must be <= ${options.max}`);
+  }
+
+  return parsed;
 }
 
 /**
@@ -261,9 +308,39 @@ function buildUserPrompt(userPrompt, language, commitSummary, diff) {
 }
 
 /**
+ * Extract plain text from a Responses API result.
+ */
+function extractResponsesText(response) {
+  if (typeof response.output_text === "string" && response.output_text.trim()) {
+    return response.output_text.trim();
+  }
+
+  const textParts = [];
+  for (const item of response.output || []) {
+    for (const content of item.content || []) {
+      if (content.type === "output_text" && content.text) {
+        textParts.push(content.text);
+      }
+    }
+  }
+
+  return textParts.join("\n").trim();
+}
+
+/**
  * Send commit and diff data to OpenAI and return a generated changelog.
  */
-async function generateChangelog(apiKey, commits, diff, language, userPrompt, systemPrompt) {
+async function generateChangelog(
+  apiKey,
+  commits,
+  diff,
+  language,
+  userPrompt,
+  systemPrompt,
+  openaiModel,
+  openaiTemperature,
+  openaiMaxOutputTokens
+) {
   const client = new OpenAI({ apiKey });
 
   const commitSummary = commits
@@ -273,9 +350,37 @@ async function generateChangelog(apiKey, commits, diff, language, userPrompt, sy
   const systemMessage = buildSystemPrompt(language, systemPrompt);
   const userMessage = buildUserPrompt(userPrompt, language, commitSummary, diff);
 
+  try {
+    const response = await client.responses.create({
+      model: openaiModel,
+      temperature: openaiTemperature,
+      max_output_tokens: openaiMaxOutputTokens,
+      input: [
+        {
+          role: "system",
+          content: [{ type: "input_text", text: systemMessage }],
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: userMessage }],
+        },
+      ],
+    });
+
+    const outputText = extractResponsesText(response);
+    if (outputText) {
+      return outputText;
+    }
+
+    console.warn("OpenAI Responses API returned empty output. Falling back to Chat Completions.");
+  } catch (error) {
+    console.warn(`OpenAI Responses API failed: ${error.message}. Falling back to Chat Completions.`);
+  }
+
   const response = await client.chat.completions.create({
-    model: "gpt-4.1-mini",
-    temperature: 0.2,
+    model: openaiModel,
+    temperature: openaiTemperature,
+    max_tokens: openaiMaxOutputTokens,
     messages: [
       {
         role: "system",
@@ -285,7 +390,12 @@ async function generateChangelog(apiKey, commits, diff, language, userPrompt, sy
     ],
   });
 
-  return response.choices[0].message.content;
+  const content = response.choices[0]?.message?.content?.trim();
+  if (!content) {
+    throw new Error("OpenAI returned an empty changelog");
+  }
+
+  return content;
 }
 
 /**
@@ -318,6 +428,9 @@ async function main() {
     language,
     slackTitle,
     slackMentions,
+    openaiModel,
+    openaiTemperature,
+    openaiMaxOutputTokens,
     userPrompt,
     systemPrompt,
   } = getInputs();
@@ -362,14 +475,17 @@ async function main() {
   }
 
   // 6. Generate changelog with OpenAI
-  console.log("🤖 Generating changelog via OpenAI…");
+  console.log(`🤖 Generating changelog via OpenAI (${openaiModel})…`);
   const changelog = await generateChangelog(
     openaiApiKey,
     commits,
     diff,
     language,
     userPrompt,
-    systemPrompt
+    systemPrompt,
+    openaiModel,
+    openaiTemperature,
+    openaiMaxOutputTokens
   );
 
   console.log("─── Generated Changelog ───");
