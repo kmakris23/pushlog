@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./logo.png" alt="Pushlog logo" width="300" />
+</p>
+
 # Pushlog
 
 A Docker-based GitHub Action that generates AI-powered changelogs from commits and code changes and posts them to Slack.
